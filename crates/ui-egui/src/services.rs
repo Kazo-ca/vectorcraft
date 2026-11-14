@@ -51,6 +51,28 @@ pub type Inbox = Arc<Mutex<Vec<(String, Vec<u8>)>>>;
 /// (the save or export then fails as a refused write does: #1693).
 pub type DownloadFn = Box<dyn FnMut(&str, &[u8]) -> Result<(), String>>;
 
+/// A save of an open document to its own file (Save, Save As), handed to
+/// [`Services::write_document`] instead of [`Services::download`] / [`Services::write`].
+#[derive(Clone, Copy, Debug)]
+pub struct DocumentWrite<'a> {
+    /// The document saved ([`vectorcraft_engine::DocState::uid`]).
+    pub doc: u64,
+    /// The save's number: [`crate::VectorcraftApp::confirm_document_write`] takes it once the file
+    /// is stored, and only then does the document count as saved.
+    pub save: u64,
+    /// Where it goes: the file name the save chose (a bare name on the web).
+    pub path: &'a str,
+    pub bytes: &'a [u8],
+    /// `false` when the document is written over its own file (Save of a document that has one);
+    /// `true` for Save As (even under the same name), a first save, and a save to another name or
+    /// format.
+    pub save_as: bool,
+}
+
+/// [`Services::write_document`]: an error when the file couldn't be handed over (the save then
+/// fails as a refused write does).
+pub type WriteDocumentFn = Box<dyn FnMut(DocumentWrite<'_>) -> Result<(), String>>;
+
 /// Opens a URL in the system browser.
 pub type OpenUrlFn = Box<dyn FnMut(&str)>;
 
@@ -93,6 +115,16 @@ pub struct Services {
     pub inbox: Option<Inbox>,
     /// Web: trigger a browser download instead of writing a path.
     pub download: Option<DownloadFn>,
+    /// A host that keeps the documents' files (the web build in a page that hosts it): each save of
+    /// a document to its own file (Save, Save As) goes here, and the document counts as saved only
+    /// when the host says the file is stored ([`crate::VectorcraftApp::confirm_document_write`]).
+    /// The other files a save writes (separate artboards, linked images), copies, templates and
+    /// exports still go to [`Self::download`] / [`Self::write`]. Without it, nothing changes.
+    pub write_document: Option<WriteDocumentFn>,
+    /// The app runs inside a page that hosts it, which may ship a modified build: the app bar,
+    /// Home and About show no community button or project links, and About names the project in
+    /// plain text (`docs/brand/LICENSE-brand.txt`).
+    pub hosted: bool,
     /// Web: start an async open (bytes arrive via `inbox`).
     pub open_async: Option<Box<dyn FnMut()>>,
     /// Read the system clipboard's text (desktop). Without it, pasted text only arrives with

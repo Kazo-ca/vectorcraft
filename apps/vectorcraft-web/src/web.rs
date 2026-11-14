@@ -60,6 +60,8 @@ struct Host {
     locks: Option<WebLocks>,
     /// Graphics restarts so far.
     restarts: u32,
+    /// Host mode's bridge, when a page hosts the app (`crate::host`).
+    bridge: Option<crate::host::Bridge>,
 }
 
 pub fn start() {
@@ -69,9 +71,14 @@ pub fn start() {
         return;
     };
     detect_language();
+    // Host mode (`craft-web-host`): a page that hosts VectorCraft sends files to open and keeps the
+    // documents' saves (`crate::host`). Not hosted, nothing changes.
+    let bridge = crate::host::Bridge::detect(&canvas);
     wasm_bindgen_futures::spawn_local(async move {
-        // Before the first frame, which looks for copies a crash left behind.
-        let locks = WebLocks::start(RECOVERY_PREFIX).await;
+        // Before the first frame, which looks for copies a crash left behind. A hosted app keeps
+        // no recovery copies: the browser's storage is the host's, shared with whatever else it
+        // runs.
+        let locks = if bridge.is_some() { None } else { WebLocks::start(RECOVERY_PREFIX).await };
         // Fallback fonts the first frame needs (Noto Sans Arabic), fetched while the loading text
         // shows; the rest load in the background once the app runs.
         crate::fonts::load_startup_fonts().await;
@@ -85,6 +92,7 @@ pub fn start() {
             pointers: SharedPointers::default(),
             locks,
             restarts: 0,
+            bridge,
         };
         track_paste(&host.pasted);
         crate::keys::keep_app_keys();
@@ -108,6 +116,7 @@ async fn run(host: Host, canvas: web_sys::HtmlCanvasElement, moving: Option<Movi
     let slot = Rc::new(RefCell::new(moving.map(|m| m.app)));
     let (runner, taken, page) = (host.runner.clone(), slot.clone(), canvas.clone());
     let (pointers, pen_canvas) = (host.pointers.clone(), canvas.clone());
+    let bridge = host.bridge.clone();
     let result = runner
         .start(
             canvas,
@@ -125,8 +134,12 @@ async fn run(host: Host, canvas: web_sys::HtmlCanvasElement, moving: Option<Movi
                 }
                 host.pasted.borrow_mut().ctx = Some(ctx.clone());
                 let stylus = host.pointers.borrow().stylus();
-                let services =
+                let mut services =
                     services(host.inbox.clone(), host.place_inbox.clone(), host.script_inbox.clone(), ctx.clone(), host.locks.clone(), stylus);
+                if let Some(bridge) = &host.bridge {
+                    bridge.connect(&mut services, ctx);
+                    services.recovery_store = None;
+                }
                 let app = match taken.borrow_mut().take() {
                     Some(mut app) => {
                         // The old services asked the old context for frames.
@@ -142,7 +155,11 @@ async fn run(host: Host, canvas: web_sys::HtmlCanvasElement, moving: Option<Movi
                         if let Err(e) = crate::api::install() {
                             log::error!("vectorcraft-web: couldn't install window.vectorcraft: {}", js_err(e));
                         }
-                        VectorcraftApp::new(Session::new(), services).with_control(control_rx)
+                        let app = VectorcraftApp::new(Session::new(), services).with_control(control_rx);
+                        if let Some(bridge) = &host.bridge {
+                            bridge.post_ready();
+                        }
+                        app
                     }
                 };
                 Ok(Box::new(WebShell { app: Some(app), host, canvas: page, loss }))
@@ -158,10 +175,16 @@ async fn run(host: Host, canvas: web_sys::HtmlCanvasElement, moving: Option<Movi
                 el.remove();
             }
         }
-        (Err(e), None) => notice(&[&format!("VectorCraft failed to start: {}", js_err(e)), "A browser with WebGPU or WebGL2 is required."]),
+        (Err(e), None) => {
+            let error = format!("VectorCraft failed to start: {}", js_err(e));
+            if let Some(bridge) = &bridge {
+                bridge.post_failed(&error);
+            }
+            notice(&[&error, "A browser with WebGPU or WebGL2 is required."]);
+        }
         (Err(e), Some(kept)) => {
             log::error!("vectorcraft-web: couldn't restart the graphics: {}", js_err(e));
-            give_up(slot.borrow_mut().take(), kept);
+            give_up(slot.borrow_mut().take(), kept, bridge.as_ref());
         }
     }
 }
@@ -292,8 +315,11 @@ fn fresh_canvas(old: &web_sys::HtmlCanvasElement) -> Result<web_sys::HtmlCanvasE
 
 /// The graphics are lost for good: the dead canvas goes (it would show a stale picture), the app
 /// (if still here) lets go of its recovery copies so the reloaded page offers them at once, and
-/// the page says what to do.
-fn give_up(app: Option<VectorcraftApp>, kept: bool) {
+/// the page says what to do. A host is told the app is gone.
+fn give_up(app: Option<VectorcraftApp>, kept: bool, bridge: Option<&crate::host::Bridge>) {
+    if let Some(bridge) = bridge {
+        bridge.post_failed("VectorCraft lost its graphics and couldn't restart them");
+    }
     if let Some(mut app) = app {
         recovery::leave(&mut app.session);
     }
@@ -363,7 +389,7 @@ impl WebShell {
                 log::error!("vectorcraft-web: giving up on the graphics: {e}");
                 let runner = host.runner;
                 wasm_bindgen_futures::spawn_local(async move { runner.destroy() });
-                give_up(Some(app), kept);
+                give_up(Some(app), kept, host.bridge.as_ref());
             }
         }
     }
@@ -375,6 +401,9 @@ impl eframe::App for WebShell {
             self.restart(&why);
         }
         let Some(app) = &mut self.app else { return };
+        if let Some(bridge) = &self.host.bridge {
+            bridge.sync(app);
+        }
         app.tick(ctx);
         app.finish_ime_logic(ctx);
     }

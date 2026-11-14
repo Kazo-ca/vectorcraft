@@ -119,6 +119,7 @@ pub use clock::{now_ms, now_secs};
 pub use craft_ui::docking::Monitor as DockMonitor;
 #[cfg(test)]
 pub(crate) use services::browsable_url;
+pub use services::{DocumentWrite, WriteDocumentFn};
 pub use services::{
     DownloadFn, ExistsFn, FileFilter, FilePick, Inbox, NativeInputHook, OpenUrlFn, PickOpen, PickSave, ReadFn, RevealFn, Services, WriteFn,
 };
@@ -257,6 +258,9 @@ pub struct VectorcraftApp {
     pub(crate) dispatcher: craft_keymap::egui::Dispatcher,
     /// Saves and exports running in the background (Preferences → File Handling).
     pub background: background::Background,
+    /// Document saves handed to [`Services::write_document`] and not confirmed yet
+    /// ([`VectorcraftApp::confirm_document_write`]).
+    pub(crate) document_writes: io::DocumentWrites,
     /// Documents being read off the UI thread ([`opening`]).
     pub opening: opening::Opening,
     /// Heavy plug-in filters running off the UI thread ([`plugin_runs`]).

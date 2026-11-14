@@ -60,6 +60,11 @@ fn home_content(app: &mut VectorcraftApp, ui: &mut Ui) {
             }
         }
     });
+    // A page that hosts the app may run a modified build: no community links
+    // (docs/brand/LICENSE-brand.txt).
+    if app.services.hosted {
+        return;
+    }
     ui.add_space(28.0);
     ui.vertical_centered(|ui| {
         ui.label(egui::RichText::new(tl!("Community")).font(theme::semibold(14.0)).color(t.text));
