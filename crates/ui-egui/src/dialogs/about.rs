@@ -60,14 +60,25 @@ fn about_tab(app: &mut VectorcraftApp, ui: &mut egui::Ui) {
         });
     });
     ui.add_space(12.0);
-    crate::community::links(app, ui);
-    ui.add_space(12.0);
-    ui.label(
-        egui::RichText::new(tl!(
-            "Part of ArtCraft. MIT OR Apache-2.0. Fonts: Source Sans 3, Inter, JetBrains Mono (OFL). Icons: Lucide (ISC) + VectorCraft."
-        ))
-        .size(11.0),
-    );
+    if app.services.hosted {
+        // A page that hosts the app may run a modified build: no community button or ArtCraft
+        // link, the project named in plain text (docs/brand/LICENSE-brand.txt).
+        ui.label(tl!("Based on VectorCraft by the ArtCraft team."));
+        ui.add_space(12.0);
+        ui.label(
+            egui::RichText::new(tl!("MIT OR Apache-2.0. Fonts: Source Sans 3, Inter, JetBrains Mono (OFL). Icons: Lucide (ISC) + VectorCraft."))
+                .size(11.0),
+        );
+    } else {
+        crate::community::links(app, ui);
+        ui.add_space(12.0);
+        ui.label(
+            egui::RichText::new(tl!(
+                "Part of ArtCraft. MIT OR Apache-2.0. Fonts: Source Sans 3, Inter, JetBrains Mono (OFL). Icons: Lucide (ISC) + VectorCraft."
+            ))
+            .size(11.0),
+        );
+    }
     // The GPU the window renders with, for bug reports (Preferences › Performance picks it).
     if let Some(adapter) = &app.graphics_adapter {
         ui.add_space(6.0);

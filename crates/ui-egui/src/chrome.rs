@@ -111,7 +111,9 @@ pub fn app_bar(app: &mut VectorcraftApp, ui: &mut Ui) {
             let ws_w = ws_w.min(room - 8.0 - gap - if search { icon } else { 0.0 }).max(64.0);
             // Explore tutorials, beside the search icon, opens the Learn panel.
             let learn = search && room >= ws_w + 8.0 + 2.0 * (gap + icon);
-            let discord = learn && room >= ws_w + 8.0 + 2.0 * (gap + icon) + 10.0 + gap + crate::community::discord_width(ui, false);
+            // A page that hosts the app (`Services::hosted`) may run a modified build: no community button.
+            let discord =
+                !app.services.hosted && learn && room >= ws_w + 8.0 + 2.0 * (gap + icon) + 10.0 + gap + crate::community::discord_width(ui, false);
             let mut rui = ui.new_child(egui::UiBuilder::new().max_rect(right).layout(egui::Layout::right_to_left(egui::Align::Center)));
             let ui = &mut rui;
             // Workspace switcher: shows the current workspace, opens Window → Workspace.

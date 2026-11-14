@@ -155,6 +155,7 @@ impl VectorcraftApp {
             // Held keys repeat their command (Cmd+= keeps zooming in).
             dispatcher: craft_keymap::egui::Dispatcher::new().with_repeat(true),
             background: Default::default(),
+            document_writes: Default::default(),
             opening: Default::default(),
             plugin_runs: Default::default(),
             placing: Default::default(),

@@ -13,6 +13,7 @@ use crate::dialogs::svg_options;
 use crate::state::Dialog;
 use crate::{FilePick, Services, VectorcraftApp, dialogs};
 
+mod document_writes;
 mod export;
 mod open;
 mod read_only_save;
@@ -20,6 +21,7 @@ mod save;
 
 #[cfg(test)]
 mod tests_read_only_save;
+pub use document_writes::{DocumentWrites, MAX_WAITING_SAVES};
 
 pub use export::{EXPORT_CANCELLED, cancel_exports, export, export_for_screens, export_pdf, hide_exports, reveal, save_command_output};
 pub(crate) use export::{

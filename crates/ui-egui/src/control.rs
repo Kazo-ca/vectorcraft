@@ -292,7 +292,10 @@ pub fn inspect(app: &VectorcraftApp, ctx: &egui::Context) -> Value {
         "windows": crate::doc_windows::windows(app),
         "currentWindow": crate::doc_windows::current(app),
         "window": [r.width(), r.height()],
-        "documents": app.session.documents().iter().map(|d| json!({"title": d.title(), "dirty": d.is_dirty()})).collect::<Vec<_>>(),
+        // Each open document, in tab order: its title, unsaved changes, `id` (stable while it is
+        // open, whatever the tab order), the file it lives at (`path`, when the request may read
+        // it) and whether it is the active one.
+        "documents": documents(app),
         "activeDocument": app.session.active_index(),
         "perf": {"frameMs": app.perf.frame_ms, "renderMs": app.perf.render_ms, "fps": app.perf.fps},
         "graphicsAdapter": app.graphics_adapter,
@@ -945,6 +948,25 @@ fn names_a_loaded_library(v: &Value) -> bool {
         Value::Object(fields) => fields.iter().any(|(key, item)| key.contains("loaded/") || names_a_loaded_library(item)),
         _ => false,
     }
+}
+
+/// `ui.inspect`'s `documents`: `{id, title, path, dirty, active}` for each open document.
+fn documents(app: &VectorcraftApp) -> Vec<Value> {
+    let active = app.session.active_index();
+    app.session
+        .documents()
+        .iter()
+        .enumerate()
+        .map(|(i, d)| {
+            json!({
+                "id": d.uid,
+                "title": d.title(),
+                "path": d.path.as_deref().filter(|p| readable(p)),
+                "dirty": d.is_dirty(),
+                "active": active == Some(i),
+            })
+        })
+        .collect()
 }
 
 /// May the request being served read `path`? Under an automation read root (a control client's
