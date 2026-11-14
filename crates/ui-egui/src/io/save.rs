@@ -425,6 +425,8 @@ fn write_plan(app: &mut VectorcraftApp, plan: SavePlan) -> Result<Value, String>
         background::wait_all(app);
     }
     let refused = plan.path.clone().unwrap_or_else(|| plan.name.clone());
+    // For a host that keeps the document's file: written over it, or somewhere else.
+    let save_as = super::document_writes::save_as(plan.mode, app.session.active().and_then(|d| d.path.as_deref()), &refused);
     // Refused before writing (#4933): told as a failed write is, in the reason's own words.
     let job = fileio::save_job(&mut app.session, plan).map_err(|e| {
         let reason = match &e {
@@ -434,6 +436,9 @@ fn write_plan(app: &mut VectorcraftApp, plan: SavePlan) -> Result<Value, String>
         report_write_error(app, false, &refused, &reason);
         e.to_string()
     })?;
+    if super::document_writes::goes_to_host(app, &job) {
+        return super::document_writes::write_to_host(app, job, uid, save_as);
+    }
     let (retargets, target) = (job.plan().retargets(), job.plan().path.clone());
     let (format, warnings) = (job.plan().format.id, job.known_warnings());
     let label = match &target {
